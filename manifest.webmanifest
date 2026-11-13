@@ -1,0 +1,17 @@
+{
+  "name": "Gros Légumes — vente et gestion",
+  "short_name": "Gros Légumes",
+  "description": "Vente, crédit, stock et caisse pour un commerce de légumes en gros. Fonctionne sans internet.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f5f0",
+  "theme_color": "#2f7d3a",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
