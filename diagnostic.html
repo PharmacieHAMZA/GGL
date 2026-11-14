@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Diagnostic de la caisse</title>
+<style>
+:root{--bg:#f6f5f0;--card:#fff;--ink:#1b2a1f;--mut:#5c685f;--line:#dcd9ce;--ok:#1f7a35;--okb:#e3f3e6;--warn:#9a6200;--warnb:#fff1d6;--bad:#a52a1d;--badb:#fde6e2;--acc:#2f7d3a}
+@media(prefers-color-scheme:dark){:root{--bg:#141a15;--card:#1d261f;--ink:#eef2ec;--mut:#a3aea5;--line:#34423a;--ok:#7fd48f;--okb:#1d3a25;--warn:#f0b84a;--warnb:#3b2f12;--bad:#ff8f80;--badb:#44201b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,"Segoe UI",Roboto,sans-serif;padding:14px 14px 60px;max-width:860px;margin-inline:auto}
+h1{font-size:22px;margin:4px 0 2px}h2{font-size:17px;margin:0 0 8px}p{margin:6px 0}.mut{color:var(--mut);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0}
+.v{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;margin:8px 0}.v b{display:block}
+.v.ok{background:var(--okb);color:var(--ok)}.v.warn{background:var(--warnb);color:var(--warn)}.v.bad{background:var(--badb);color:var(--bad)}.v span:first-child{font-size:20px}
+table{width:100%;border-collapse:collapse;font-size:14.5px}td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top}td:first-child{color:var(--mut);width:42%}
+button,.btn{min-height:56px;padding:0 18px;border-radius:14px;border:0;background:var(--acc);color:#fff;font:inherit;font-weight:700;cursor:pointer;margin:6px 6px 0 0}
+button.sec{background:var(--card);color:var(--ink);border:1px solid var(--line)}button:disabled{opacity:.45}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}.t{min-height:64px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;margin:0}.t.hit{background:var(--okb);border-color:var(--ok);color:var(--ok)}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;font-size:13px;max-height:260px;overflow:auto}
+select{min-height:48px;font:inherit;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:0 10px}
+</style>
+</head>
+<body>
+<h1>Diagnostic de la caisse</h1>
+<p class="mut">Ouvrez cette page sur la caisse. Elle ne modifie aucune donnée. À la fin, faites une capture d'écran du résumé et du rapport, ou touchez « Copier le rapport », et envoyez-le moi.</p>
+
+<div class="card"><h2>Résumé</h2><div id="verdict"></div></div>
+<div class="card"><h2>Écran et appareil</h2><table id="t-screen"></table></div>
+<div class="card"><h2>Système et navigateur</h2><table id="t-sys"></table></div>
+<div class="card"><h2>Fonctions disponibles</h2><table id="t-cap"></table></div>
+
+<div class="card"><h2>Test tactile</h2>
+<p class="mut">Touchez chaque carré avec le doigt. Les 12 doivent se colorer. Essayez aussi avec deux doigts.</p>
+<div class="grid" id="tgrid"></div>
+<p id="tout" class="mut">0 / 12 carrés touchés · doigts simultanés maximum : 0</p></div>
+
+<div class="card"><h2>Test d'impression</h2>
+<p class="mut">Allumez l'imprimante. Le test Bluetooth direct ne marche qu'avec une imprimante <b>Bluetooth Low Energy (BLE)</b>.</p>
+<label class="mut">Largeur du papier : <select id="w"><option value="384">58 mm</option><option value="576">80 mm</option></select></label><br>
+<button id="b-scan">1. Chercher l'imprimante Bluetooth</button>
+<button id="b-text" class="sec" disabled>2. Ticket d'essai (texte)</button>
+<button id="b-img" class="sec" disabled>3. Ticket d'essai arabe (image)</button>
+<button id="b-rawbt" class="sec">Essai RawBT (Android)</button>
+<button id="b-print" class="sec">Impression par le navigateur</button>
+<pre id="plog">Aucun essai pour le moment.</pre></div>
+
+<div class="card"><h2>Rapport à m'envoyer</h2><pre id="report"></pre><button id="b-copy">Copier le rapport</button><button id="b-refresh" class="sec">Actualiser</button></div>
+
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const R={}; // rapport
+const row=(t,k,v)=>{R[k]=v;t.insertAdjacentHTML('beforeend','<tr><td>'+esc(k)+'</td><td>'+esc(v)+'</td></tr>');};
+const yn=b=>b?'oui':'non';
+const ua=navigator.userAgent, uad=navigator.userAgentData;
+const plat=(uad&&uad.platform)||navigator.platform||'?';
+const isAndroid=/Android/i.test(ua), isWin=/Windows/i.test(ua)||/Win/i.test(plat), isIOS=/iPhone|iPad|iPod/i.test(ua);
+const chrome=(ua.match(/Chrome\/(\d+)/)||[])[1]||'non détecté';
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const features={ble:!!navigator.bluetooth,usb:!!navigator.usb,serial:!!navigator.serial,wake:'wakeLock' in navigator,
+  share:!!(navigator.canShare&&navigator.canShare({files:[new File(['x'],'x.txt',{type:'text/plain'})]})),sw:'serviceWorker' in navigator,idb:!!window.indexedDB,secure:window.isSecureContext};
+
+function fill(){
+  ['t-screen','t-sys','t-cap'].forEach(i=>$(i).innerHTML='');
+  const s=$('t-screen'),y=$('t-sys'),c=$('t-cap');
+  row(s,'Résolution de l\'écran',screen.width+' × '+screen.height+' px');
+  row(s,'Zone de l\'application',innerWidth+' × '+innerHeight+' px');
+  row(s,'Densité de pixels',String(devicePixelRatio));
+  row(s,'Orientation',innerWidth>=innerHeight?'paysage':'portrait');
+  row(s,'Points de contact tactiles',String(navigator.maxTouchPoints||0));
+  row(s,'Pointeur principal',matchMedia('(pointer: coarse)').matches?'doigt (tactile)':matchMedia('(pointer: fine)').matches?'souris':'inconnu');
+  row(s,'Survol possible',yn(matchMedia('(hover: hover)').matches));
+  row(y,'Système',plat+(isAndroid?' (Android)':isWin?' (Windows)':isIOS?' (iOS)':''));
+  row(y,'Navigateur','Chrome '+chrome);
+  row(y,'Installée comme application',yn(standalone));
+  row(y,'Adresse',location.protocol+'//'+location.host);
+  row(y,'Connexion internet',yn(navigator.onLine));
+  row(y,'Langue',navigator.language);
+  row(y,'Fuseau horaire',Intl.DateTimeFormat().resolvedOptions().timeZone);
+  row(c,'Adresse sécurisée (https)',yn(features.secure));
+  row(c,'Mode hors ligne (service worker)',yn(features.sw));
+  row(c,'Base de données du navigateur',yn(features.idb));
+  row(c,'Bluetooth direct (Web Bluetooth)',yn(features.ble));
+  row(c,'USB direct (WebUSB)',yn(features.usb));
+  row(c,'Port série (WebSerial)',yn(features.serial));
+  row(c,'Écran toujours allumé (Wake Lock)',yn(features.wake));
+  row(c,'Partage de fichiers',yn(features.share));
+  (async()=>{
+    try{ if(navigator.storage&&navigator.storage.estimate){const e=await navigator.storage.estimate();row(c,'Espace disponible',Math.round((e.quota||0)/1048576)+' Mo (utilisé '+Math.round((e.usage||0)/1048576)+' Mo)');}
+      if(navigator.storage&&navigator.storage.persisted){const p=await navigator.storage.persisted();row(c,'Stockage protégé contre l\'effacement automatique',yn(p));}
+    }catch(e){} verdict(); report();
+  })();
+  verdict(); report();
+}
+function verdict(){
+  const v=[]; const add=(k,t,d)=>v.push('<div class="v '+k+'"><span>'+({ok:'✅',warn:'⚠️',bad:'❌'}[k])+'</span><div><b>'+esc(t)+'</b>'+esc(d)+'</div></div>');
+  if(!features.secure) add('bad','Adresse non sécurisée','Ouvrez le site par son adresse https:// (GitHub Pages). Sans cela : pas de mode hors ligne, pas de Bluetooth, pas d\'installation.'); else add('ok','Adresse sécurisée','Installation et mode hors ligne possibles.');
+  if(!(navigator.maxTouchPoints>0)) add('warn','Pas d\'écran tactile détecté','Le navigateur ne signale aucun contact tactile.'); else add('ok','Écran tactile détecté',navigator.maxTouchPoints+' point(s) de contact.');
+  if(isIOS) add('bad','iPhone / iPad','Le Bluetooth direct n\'existe pas sur iOS : il faudrait une autre solution d\'impression.');
+  else if(features.ble) add('ok','Bluetooth direct disponible','Il fonctionne seulement avec une imprimante BLE : faites le test d\'impression ci-dessous.');
+  else if(isAndroid) add('warn','Bluetooth direct indisponible','Sur Android, utilisez l\'application RawBT pour imprimer.');
+  else add('warn','Bluetooth direct indisponible','Utilisez Chrome à jour, ou l\'impression par le navigateur.');
+  if(isAndroid) add('ok','Android','RawBT est utilisable, y compris pour une imprimante à câble USB ou Bluetooth classique.');
+  if(isWin) add('warn','Windows','L\'imprimante à câble passe par le pilote Windows (impression du navigateur). Le Bluetooth direct marche si l\'imprimante est BLE.');
+  if(!features.wake) add('warn','Écran toujours allumé non garanti','Réglez la mise en veille de l\'appareil sur « jamais » pendant les heures de travail.');
+  if(!standalone) add('warn','Pas encore installée','Menu ⋮ de Chrome → Installer l\'application.');
+  $('verdict').innerHTML=v.join('');
+}
+function report(){
+  const lines=['DIAGNOSTIC CAISSE — '+new Date().toLocaleString()]; for(const k in R) lines.push(k+' : '+R[k]); lines.push('Navigateur (UA) : '+ua);
+  if(window.__ptest) lines.push('Test impression : '+window.__ptest);
+  $('report').textContent=lines.join('\n');
+}
+/* ---- test tactile */
+const hit=new Set(); let maxFingers=0;
+const g=$('tgrid'); for(let i=1;i<=12;i++){const b=document.createElement('button');b.className='t';b.textContent=i;b.dataset.i=i;g.appendChild(b);}
+g.addEventListener('pointerdown',e=>{const b=e.target.closest('.t');if(!b)return;b.classList.add('hit');hit.add(b.dataset.i);tout();});
+document.addEventListener('touchstart',e=>{maxFingers=Math.max(maxFingers,e.touches.length);tout();},{passive:true});
+function tout(){R['Test tactile']=hit.size+'/12 carrés, doigts max '+maxFingers;$('tout').textContent=hit.size+' / 12 carrés touchés · doigts simultanés maximum : '+maxFingers;report();}
+/* ---- impression */
+const log=m=>{const p=$('plog');p.textContent=(p.textContent==='Aucun essai pour le moment.'?'':p.textContent+'\n')+m;window.__ptest=p.textContent.replace(/\n/g,' | ');report();p.scrollTop=p.scrollHeight;};
+let ch=null,devName='';
+const ESC=0x1b,GS=0x1d,LF=0x0a;
+const enc=s=>Uint8Array.from(String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').split('').map(c=>{const n=c.charCodeAt(0);return n<128?n:63;}));
+function textTicket(){const o=[ESC,0x40];const L=(s,b)=>{o.push(ESC,0x45,b?1:0,...enc(s),LF);};
+  L('TEST IMPRESSION',1);L('Gros Legumes');L('--------------------------------');L('Tomate        12,500 kg      1 875 DA');L('Pomme de terre 20,000 kg      2 400 DA');L('--------------------------------');L('TOTAL                        4 275 DA',1);
+  L('Ligne de 32 caracteres: 12345678');L('');L('Si vous lisez ceci : OK');o.push(LF,LF,LF,GS,0x56,0x42,0);return Uint8Array.from(o);}
+function imgTicket(w){const cv=document.createElement('canvas');cv.width=w;cv.height=260;const x=cv.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,260);x.fillStyle='#000';x.textAlign='center';
+  x.font='bold 30px sans-serif';x.fillText('TEST IMAGE '+(w===384?'58':'80')+' mm',w/2,44);x.direction='rtl';x.font='bold 34px sans-serif';x.fillText('اختبار الطباعة',w/2,100);x.fillText('طماطم 12,500 كغ',w/2,150);
+  x.direction='ltr';x.font='24px sans-serif';x.fillText('Bord gauche et droit visibles ?',w/2,196);x.fillRect(0,0,6,260);x.fillRect(w-6,0,6,260);x.fillRect(0,252,w,8);
+  const d=x.getImageData(0,0,w,260).data,bits=new Uint8Array(w*260);for(let i=0;i<bits.length;i++)bits[i]=(d[i*4]+d[i*4+1]+d[i*4+2])/3<140?1:0;
+  const w8=Math.ceil(w/8),o=[ESC,0x40];for(let y0=0;y0<260;y0+=255){const h=Math.min(255,260-y0);o.push(GS,0x76,0x30,0,w8&255,w8>>8,h&255,h>>8);
+    for(let y=0;y<h;y++)for(let bx=0;bx<w8;bx++){let b=0;for(let k=0;k<8;k++){const xx=bx*8+k;if(xx<w&&bits[(y0+y)*w+xx])b|=0x80>>k;}o.push(b);}}
+  o.push(LF,LF,GS,0x56,0x42,0);return Uint8Array.from(o);}
+async function send(bytes){ if(!ch) throw new Error('imprimante non connectée'); for(let i=0;i<bytes.length;i+=100){const part=bytes.subarray(i,i+100); if(ch.properties.writeWithoutResponse) await ch.writeValueWithoutResponse(part); else await ch.writeValue(part); await new Promise(r=>setTimeout(r,25));} }
+$('b-scan').onclick=async()=>{
+  if(!navigator.bluetooth){log('Bluetooth direct indisponible sur cet appareil/navigateur.');return;}
+  try{
+    log('Recherche… choisissez votre imprimante dans la liste.');
+    const dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[0xFFE0,0xFF00,0x18F0,0xFFE5,0xFEE7,'49535343-fe7d-4ae5-8fa9-9fafd205e455','e7810a71-73ae-499d-8c15-faa9aef0c3f2']});
+    devName=dev.name||'(sans nom)';log('Appareil choisi : '+devName+' — connexion…');
+    const srv=await dev.gatt.connect(); let found=null; const seen=[];
+    for(const s of await srv.getPrimaryServices()){for(const c of await s.getCharacteristics()){const p=['write','writeWithoutResponse'].filter(k=>c.properties[k]);seen.push(s.uuid.slice(0,8)+'/'+c.uuid.slice(0,8)+' '+p.join('+'));if(!found&&p.length)found=c;}}
+    log('Services trouvés : '+(seen.join(' ; ')||'aucun'));
+    if(!found){log('❌ Aucune caractéristique d\'écriture : cette imprimante n\'est probablement pas BLE (Bluetooth classique). Utilisez RawBT sur Android.');return;}
+    ch=found;$('b-text').disabled=$('b-img').disabled=false;log('✅ Imprimante connectée. Lancez les tickets d\'essai 2 et 3.');
+  }catch(e){log('❌ '+(e&&e.name==='NotFoundError'?'Aucune imprimante choisie (ou aucune trouvée : est-elle allumée et en mode BLE ?)':(e.message||e)));}
+};
+$('b-text').onclick=async()=>{try{await send(textTicket());log('Ticket texte envoyé. Est-il imprimé correctement ?');}catch(e){log('❌ '+(e.message||e));}};
+$('b-img').onclick=async()=>{try{await send(imgTicket(+$('w').value));log('Ticket image envoyé. Les barres gauche/droite et l\'arabe sont-ils bien visibles ?');}catch(e){log('❌ '+(e.message||e));}};
+$('b-rawbt').onclick=()=>{const b=textTicket();let s='';for(const x of b)s+=String.fromCharCode(x);log('Ouverture de RawBT…');location.href='rawbt:base64,'+btoa(s);};
+$('b-print').onclick=()=>{log('Ouverture de l\'impression du navigateur…');window.print();};
+$('b-copy').onclick=async()=>{try{await navigator.clipboard.writeText($('report').textContent);$('b-copy').textContent='Copié ✔';setTimeout(()=>$('b-copy').textContent='Copier le rapport',2000);}catch(e){const r=document.createRange();r.selectNodeContents($('report'));const s=getSelection();s.removeAllRanges();s.addRange(r);$('b-copy').textContent='Sélectionné : copiez';}};
+$('b-refresh').onclick=fill;
+addEventListener('resize',()=>{fill();});
+fill();
+window.__diag={textTicket,imgTicket,features};
+})();
+</script>
+</body>
+</html>

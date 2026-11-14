@@ -1,6 +1,6 @@
 /* Service worker — coque hors ligne. Cache versionné : une nouvelle version = nouveau nom de cache. */
-const CACHE = 'ggl-1.0.f11442e8';
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+const CACHE = 'ggl-1.0.09fd6d67';
+const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'diagnostic.html', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('ggl-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('message', e => { if (e.data === 'skip') self.skipWaiting(); });
